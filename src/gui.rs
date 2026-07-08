@@ -2,7 +2,7 @@
 //! of every session, and weekly hour totals.
 
 use crate::db;
-use crate::shared::{fmt_clock, fmt_hm, fmt_hms, fmt_stamp, Shared};
+use crate::shared::{fmt_balance, fmt_clock, fmt_hm, fmt_hms, fmt_stamp, Shared};
 use chrono::{DateTime, Local, NaiveDateTime, NaiveTime, TimeZone};
 use std::sync::atomic::Ordering;
 use std::sync::Arc;
@@ -183,6 +183,10 @@ impl eframe::App for ReportsApp {
             .shared
             .with_db(|c| db::weekly_totals(c, now))
             .unwrap_or_default();
+        let balance = self
+            .shared
+            .with_db(|c| db::time_balance(c, now))
+            .unwrap_or_default();
 
         egui::CentralPanel::default().show(ctx, |ui| {
             egui::ScrollArea::vertical().show(ui, |ui| {
@@ -323,6 +327,45 @@ impl eframe::App for ReportsApp {
                         }
                     }
                 }
+
+                ui.add_space(14.0);
+
+                // ---- hour balance -----------------------------------------
+                ui.heading("Hour balance");
+                ui.separator();
+                let bal_color = |secs: i64| {
+                    if secs >= 60 {
+                        ERR_RED // owe time
+                    } else if secs <= -60 {
+                        OK_GREEN // ahead
+                    } else {
+                        egui::Color32::GRAY
+                    }
+                };
+                egui::Grid::new("balance_grid")
+                    .spacing([24.0, 4.0])
+                    .show(ui, |ui| {
+                        ui.label("This week:");
+                        ui.colored_label(
+                            bal_color(balance.week_secs),
+                            egui::RichText::new(fmt_balance(balance.week_secs)).strong(),
+                        );
+                        ui.end_row();
+                        ui.label("All time:");
+                        ui.colored_label(
+                            bal_color(balance.all_secs),
+                            egui::RichText::new(fmt_balance(balance.all_secs)).strong(),
+                        );
+                        ui.end_row();
+                    });
+                ui.label(
+                    egui::RichText::new(
+                        "\u{201c}owe\u{201d} = time to make up from checking out early; \
+                         \u{201c}ahead\u{201d} = extra time worked that repays it.",
+                    )
+                    .small()
+                    .color(egui::Color32::GRAY),
+                );
 
                 ui.add_space(14.0);
 
