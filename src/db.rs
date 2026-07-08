@@ -187,6 +187,38 @@ pub fn all_sessions(conn: &Connection) -> rusqlite::Result<Vec<Session>> {
     rows.collect()
 }
 
+/// Monday of the ISO week containing `d`.
+fn week_start(d: NaiveDate) -> NaiveDate {
+    d - Duration::days(d.weekday().num_days_from_monday() as i64)
+}
+
+/// The "hour balance": how much time you owe (positive) or are ahead by
+/// (negative), for the current week and over all time. Only *completed*
+/// sessions count — each contributes `workday_secs - worked`, so checking out
+/// early adds debt and working late repays it.
+#[derive(Clone, Copy, Debug, Default)]
+pub struct Balance {
+    pub week_secs: i64,
+    pub all_secs: i64,
+}
+
+pub fn time_balance(conn: &Connection, now: DateTime<Local>) -> rusqlite::Result<Balance> {
+    let this_week = week_start(now.date_naive());
+    let mut bal = Balance::default();
+    for s in all_sessions(conn)? {
+        // Skip the in-progress session; its balance isn't settled yet.
+        if s.check_out.is_none() {
+            continue;
+        }
+        let delta = s.workday_secs - s.worked_secs(now); // positive => you owe
+        bal.all_secs += delta;
+        if week_start(s.check_in.date_naive()) == this_week {
+            bal.week_secs += delta;
+        }
+    }
+    Ok(bal)
+}
+
 /// A week's worth of totals for the report view.
 #[derive(Clone, Debug)]
 pub struct WeekTotal {
@@ -203,11 +235,9 @@ pub fn weekly_totals(conn: &Connection, now: DateTime<Local>) -> rusqlite::Resul
     let mut order: Vec<NaiveDate> = Vec::new();
     let mut totals: std::collections::HashMap<NaiveDate, (i64, usize)> = std::collections::HashMap::new();
     for s in &sessions {
-        let d = s.check_in.date_naive();
-        // Monday as the start of the ISO week.
-        let week_start = d - Duration::days(d.weekday().num_days_from_monday() as i64);
-        let entry = totals.entry(week_start).or_insert_with(|| {
-            order.push(week_start);
+        let ws = week_start(s.check_in.date_naive());
+        let entry = totals.entry(ws).or_insert_with(|| {
+            order.push(ws);
             (0, 0)
         });
         entry.0 += s.worked_secs(now);
@@ -316,6 +346,37 @@ mod tests {
         // Delete it.
         delete_session(&c, id).unwrap();
         assert_eq!(all_sessions(&c).unwrap().len(), 0);
+    }
+
+    #[test]
+    fn time_balance_tracks_debt_and_repayment() {
+        let c = mem();
+        let now = Local::now();
+        // Today: left 1h early -> owe 1h.
+        let a = now - Duration::hours(9);
+        c.execute(
+            "INSERT INTO sessions (check_in, check_out, workday_secs) VALUES (?1, ?2, ?3)",
+            (a.to_rfc3339(), (a + Duration::hours(7)).to_rfc3339(), WORKDAY_SECS),
+        )
+        .unwrap();
+        let bal = time_balance(&c, now).unwrap();
+        assert_eq!(bal.week_secs, 3600);
+        assert_eq!(bal.all_secs, 3600);
+
+        // Also today: worked 9h -> repays 1h, balance now even.
+        let b = now - Duration::hours(10);
+        c.execute(
+            "INSERT INTO sessions (check_in, check_out, workday_secs) VALUES (?1, ?2, ?3)",
+            (b.to_rfc3339(), (b + Duration::hours(9)).to_rfc3339(), WORKDAY_SECS),
+        )
+        .unwrap();
+        let bal = time_balance(&c, now).unwrap();
+        assert_eq!(bal.week_secs, 0);
+        assert_eq!(bal.all_secs, 0);
+
+        // The active (in-progress) session must not affect the balance.
+        check_in(&c).unwrap();
+        assert_eq!(time_balance(&c, now).unwrap().all_secs, 0);
     }
 
     #[test]
