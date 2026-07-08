@@ -27,6 +27,7 @@ Icon=alarm-symbolic
 Terminal=false
 Categories=Utility;
 StartupNotify=false
+StartupWMClass=workday_timer
 EOF
 
 echo
