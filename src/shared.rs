@@ -136,6 +136,18 @@ pub fn fmt_hm(secs: i64) -> String {
     format!("{}h {:02}m", s / 3600, (s % 3600) / 60)
 }
 
+/// Describe an hour balance: positive seconds mean you owe time, negative
+/// means you are ahead. Sub-minute amounts read as "even".
+pub fn fmt_balance(secs: i64) -> String {
+    if secs >= 60 {
+        format!("owe {}", fmt_hm(secs))
+    } else if secs <= -60 {
+        format!("ahead {}", fmt_hm(-secs))
+    } else {
+        "even".to_string()
+    }
+}
+
 /// A clock time like "17:30".
 pub fn fmt_clock(dt: DateTime<Local>) -> String {
     dt.format("%H:%M").to_string()
