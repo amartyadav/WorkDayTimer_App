@@ -3,7 +3,7 @@
 A tiny Rust app for Ubuntu that lives in the GNOME menu bar and counts down the
 time left in your 8-hour workday. It records every check-in / check-out in a
 local SQLite database and shows a reports window with weekly totals.
-
+Co-built with Claude.
 ## Features
 
 - **Menu-bar (tray) icon** with a live countdown:
