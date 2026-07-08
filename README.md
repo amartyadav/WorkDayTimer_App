@@ -14,6 +14,10 @@ local SQLite database and shows a reports window with weekly totals.
   *Open Reports*, and *Quit*.
 - **Reports window** (also has Check In / Check Out buttons):
   - big live countdown and your expected leave time;
+  - **hour balance** — time you *owe* (checked out early) vs. time you're
+    *ahead* (worked late), shown **this week** and **all-time**; working extra
+    repays the debt and both counters update. Only completed sessions count;
+    amounts are minute-level ("even" under a minute);
   - **check in at an earlier time today** (forgot to check in? enter HH:MM);
   - **check out at an earlier time** (forgot to click when you left? enter HH:MM);
   - **reset today's check-in** — discard the current session to redo it with a
@@ -28,6 +32,9 @@ local SQLite database and shows a reports window with weekly totals.
 - Closing the window **minimizes it** and the tray timer keeps running (hiding a
   window isn't supported on Wayland). Reopen it from the tray; use the tray's
   *Quit* to exit completely.
+- **Single instance**: launching it again while it's already running just raises
+  the existing window instead of starting a second copy (coordinated through a
+  socket at `$XDG_RUNTIME_DIR/workday_timer.sock`).
 
 ## Threads
 
